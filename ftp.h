@@ -1,6 +1,5 @@
- 
-#ifndef TIANJING_FTP_H
-#define TIANJING_FTP_H
+#ifndef FTP_H
+#define FTP_H
  
 #include <stdio.h>
 #include <stdio.h>
@@ -16,15 +15,14 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <time.h>
-#define MAX_BUFF 512
-#define MAX_CMD_LEN 512
+
+#define MAX_BUFF_SIZE 512
 #define MAX_INPUT_SIZE 128
 
- //Link server
+//Link server
 int ftp_connectServer( const char *host, char* re_buf, int port );
 int ftp_sendcmd( int sock, char *cmd, void *re_buf, ssize_t *len);
 void ftp_readInput(char* user_input, int size);
-
 
 int ftp_login(int c_sock, const char* host);
  //Disconnect the server
@@ -35,16 +33,16 @@ int ftp_type( int c_sock, char mode );
 int ftp_cwd( int c_sock, char *path );
  // print working directory
 int ftp_pwd(int c_sock, char* re_data);
- //List
+ //List file
 int ftp_list( int c_sock, char *path, void **data, ssize_t *data_len);
  //download file 
 int ftp_retrfile( int c_sock, char *s, char *d ,ssize_t *stor_size);
  //upload files 
 int ftp_storfile( int c_sock, char *d, char *s ,ssize_t *stor_size);
  
-#endif //TIANJING_FTP_H
+#endif //_FTP_H
  
- 
+
 /** Reply Codes by Function Groups
     110 Restart marker reply.
         In this case, the text is exact and not left to the
@@ -146,3 +144,5 @@ int ftp_storfile( int c_sock, char *d, char *s ,ssize_t *stor_size);
     NOOP <CRLF>
 
 **/
+
+// PASV cmd formula: https://support.solarwinds.com/SuccessCenter/s/article/227-FTP-response-code?language=en_US

@@ -6,18 +6,17 @@
  
 #define PORT 21
 
-//gcc -o ftp ftp.h ftp.c client.c
-
+//compile: gcc -o ftp ftp.h ftp.c client.c
 
 int main(int argc, char const *argv[]){
 	
 	if (argc != 2) {
-		printf("usage: ./ftp host(FTP server ip)\n");
-		exit(0);
+		printf("usage: ./ftp hostname(FTP server ip)\n");
+		return 0;
 	}
     // connect to server
-    char  cmd[MAX_BUFF],response[MAX_BUFF], input[MAX_CMD_LEN];
-	int     c_sock;
+    char  response[MAX_BUFF_SIZE], input[MAX_BUFF_SIZE];
+	int   c_sock;
 
     c_sock = ftp_connectServer( argv[1], response, PORT );
     if ( c_sock == -1 ) {
@@ -30,6 +29,7 @@ int main(int argc, char const *argv[]){
 	// login
 	if( ftp_login(c_sock, argv[1]) == -1) {
 		printf("ftp: Login failed\n");
+		return -1;
 	}
 
 	while (1) { // loop until user types quit
@@ -53,6 +53,7 @@ int main(int argc, char const *argv[]){
 		} else if(strncmp(input, "ls", 2) == 0) { // Get list file
 			void *data;
 			ssize_t len;
+
 			if(input[2] == ' ') {
 				ftp_list(c_sock, input+3, &data, &len);
 			} else {
@@ -61,7 +62,10 @@ int main(int argc, char const *argv[]){
 			}
 			char *list = (char*)malloc(len);
 			memcpy(list, data, len);
-			printf("%s",list);
+
+			printf("%s",list);			
+			free(list);
+			list = NULL;
 		} else if(strncmp(input, "pwd", 3) == 0) { // print working directory
 			ftp_pwd(c_sock, response);
 			printf("Remote directoy: %s\n",response);
@@ -69,8 +73,8 @@ int main(int argc, char const *argv[]){
 			ftp_cwd(c_sock, input+3);
 		} else if(strncmp(input, "get ", 4) == 0) { // Download files: get REMOTE_FILE_PATH LOCAL_FILE_PATH
 			ssize_t len;
-			char local_file_path[MAX_BUFF] = {0}, 
-			     remote_file_path[MAX_BUFF] = {0};
+			char local_file_path[MAX_BUFF_SIZE] = {0}, 
+			     remote_file_path[MAX_BUFF_SIZE] = {0};
 			
 			sscanf(input + 4,"%s %s", remote_file_path, local_file_path);
 			if(local_file_path[0] == '\0') {
@@ -81,8 +85,8 @@ int main(int argc, char const *argv[]){
 
 		}  else if(strncmp(input, "put ", 4) == 0) { // upload files: put LOCAL_FILE_PATH REMOTE_FILE_PATH
 			ssize_t len;
-			char local_file_path[MAX_BUFF] = {0}, 
-			     remote_file_path[MAX_BUFF] = {0};
+			char local_file_path[MAX_BUFF_SIZE] = {0}, 
+			     remote_file_path[MAX_BUFF_SIZE] = {0};
 			
 			sscanf(input + 4,"%s %s", local_file_path, remote_file_path);
 			if(remote_file_path[0] == '\0') {

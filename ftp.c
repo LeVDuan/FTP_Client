@@ -1,4 +1,5 @@
 #include "ftp.h"
+
 void replace_multi_space_with_single_space(char *str)
 {
     char *dest = str;  /* Destination to copy to */
@@ -26,9 +27,7 @@ void replace_multi_space_with_single_space(char *str)
     }
 }
 
-/** 
- * Read input from command line
- */
+//Read user input and 
 void ftp_readInput(char* user_input, int size)
 {
 	memset(user_input, 0, size);
@@ -59,10 +58,13 @@ int socket_connect(const char *host,int port)
  
     if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0 ||
         setsockopt(s, IPPROTO_IP, IP_TOS, &opvalue, slen) < 0) // IP_TOS -> ipv4
+        {
+
         // int setsockopt(int socket, int level, int option_name,const void *option_value, socklen_t option_len);
         return -1;
+        }
  
-         //Set receiving and sending timeout
+        //Set receiving and sending timeout
     struct timeval timeo = {15, 0};
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeo, sizeof(timeo));
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeo, sizeof(timeo));
@@ -71,8 +73,9 @@ int socket_connect(const char *host,int port)
     address.sin_port = htons((unsigned short)port);
  
     struct hostent* server = gethostbyname(host);
-    if (!server)
+    if (!server) {
         return -1;
+    }
 
     memcpy(&address.sin_addr.s_addr, server->h_addr, server->h_length);
  
@@ -81,12 +84,12 @@ int socket_connect(const char *host,int port)
  
     return s;
 }
+
  //Connect to a ftp server and return socket
 int ftp_connectServer( const char *host, char* re_buf,int port )
 {
-    int       ctrl_sock;
-    char      buf[512];
-    int       result;
+    int       ctrl_sock, result;
+    char      buf[MAX_BUFF_SIZE];
     ssize_t   len;
  
     ctrl_sock = socket_connect(host, port);
@@ -95,7 +98,7 @@ int ftp_connectServer( const char *host, char* re_buf,int port )
     }
  
     len = recv( ctrl_sock, buf, 512, 0 );
-    buf[len] = 0;
+    buf[len] = '\0';
     sscanf( buf, "%d", &result );
     if ( result != 220 ) {
         close( ctrl_sock );
@@ -104,19 +107,20 @@ int ftp_connectServer( const char *host, char* re_buf,int port )
     sprintf(re_buf, "%s", buf);
     return ctrl_sock;
 }
- //Send command and return result
+ //Send command and return FTP server reply code
 int ftp_sendcmd( int sock, char *cmd, void *re_buf, ssize_t *len)
 {
-    char        buf[512];
+    char        buf[MAX_BUFF_SIZE];
     ssize_t     r_len;
-    int re_code;
+    int         re_code;
  
-    if ( send( sock, cmd, strlen(cmd), 0 ) == -1 )
+    if ( send( sock, cmd, strlen(cmd), 0 ) == -1 ){
         return -1;
+    }
  
-    r_len = recv( sock, buf, 512, 0 );
+    r_len = recv( sock, buf, MAX_BUFF_SIZE, 0 );
     if ( r_len < 1 ) return -1;
-    buf[r_len] = 0;
+    buf[r_len] = '\0';
  
     if (len != NULL) *len = r_len;
     if (re_buf != NULL) sprintf(re_buf, "%s", buf);
@@ -128,21 +132,23 @@ int ftp_sendcmd( int sock, char *cmd, void *re_buf, ssize_t *len)
  //Log in to the ftp server
 int ftp_login(int c_sock, const char* host)
 {
-    char user[50], re_buf[MAX_BUFF],cmd[MAX_CMD_LEN];
+    char user[MAX_INPUT_SIZE], re_buf[MAX_BUFF_SIZE],cmd[MAX_BUFF_SIZE];
     int re_code;
     ssize_t len;
+
     printf("Name (%s): ", host);
 	fflush(stdout);
-	ftp_readInput(user, MAX_BUFF);
+	ftp_readInput(user, MAX_BUFF_SIZE);
 	sprintf(cmd, "USER %s\r\n", user);
 	re_code = ftp_sendcmd(c_sock, cmd, re_buf, &len);
 	re_buf[len] = '\0';
 
-	if( re_code == 230) {
+	if( re_code == 230) { //230 login without password
 		printf("%s", re_buf);
-	} else if (re_code == 331) {
+	} else if (re_code == 331) { //331 User name okay, need password.
 		printf("%s",re_buf);
 		fflush(stdout);
+
 		char *pwd = getpass("Password: ");	
 		sprintf( cmd, "PASS %s\r\n", pwd );
 		re_code = ftp_sendcmd( c_sock, cmd, re_buf, &len );
@@ -153,69 +159,23 @@ int ftp_login(int c_sock, const char* host)
 	}
     return 0;
 }
-int create_datasock( int ctrl_sock )
-{
-    int     lsn_sock;
-    int     port;
-    int     len;
-    struct sockaddr_in sin;
-    char    cmd[MAX_CMD_LEN], re_buf[MAX_BUFF];
-    ssize_t re_len;
- 
-    lsn_sock = socket( AF_INET, SOCK_STREAM, IPPROTO_TCP );
-    if ( lsn_sock == -1 ) return -1;
-    memset( (char *)&sin, 0, sizeof(sin) );
-    sin.sin_family = AF_INET;
-    if( bind(lsn_sock, (struct sockaddr *)&sin, sizeof(sin)) == -1 ) {
-        close( lsn_sock );
-        return -1;
-    }
- 
-    if( listen(lsn_sock, 2) == -1 ) {
-        close( lsn_sock );
-        return -1;
-    }
- 
-    len = sizeof( struct sockaddr );
-    if ( getsockname( lsn_sock, (struct sockaddr *)&sin, (socklen_t *)&len ) == -1 )
-    {
-        close( lsn_sock );
-        return -1;
-    }
-    port = sin.sin_port;
- 
-    if( getsockname( ctrl_sock, (struct sockaddr *)&sin, (socklen_t *)&len ) == -1 )
-    {
-        close( lsn_sock );
-        return -1;
-    }
- 
-    sprintf( cmd, "PORT %d,%d,%d,%d,%d,%d\r\n", // PORT h1,h2,h3,h4,p1,p2 -> h1->h4 chia địa chỉ thành 8bit và gửi ở dạng %d
-             sin.sin_addr.s_addr&0x000000FF,
-             (sin.sin_addr.s_addr&0x0000FF00)>>8,
-             (sin.sin_addr.s_addr&0x00FF0000)>>16,
-             (sin.sin_addr.s_addr&0xFF000000)>>24,
-             port>>8, port&0xff );
- 
-    if ( ftp_sendcmd( ctrl_sock, cmd, re_buf, &re_len) != 200 ) {
-        close( lsn_sock );
-        return -1;
-    }
-    return lsn_sock;
-}
- //Connect to PASV interface
+
+//Connect to PASV interface
 int ftp_pasv_connect( int c_sock )
 {
-    int     r_sock, addr[6], send_re;
     ssize_t len;
-    char    buf[MAX_CMD_LEN], re_buf[MAX_BUFF];
+    int     r_sock, addr[6], re_code;
+    char    buf[MAX_BUFF_SIZE], re_buf[MAX_BUFF_SIZE];
  
     //Set PASV passive mode
     memset(buf, 0, sizeof(buf));
     sprintf( buf, "PASV\r\n");
-    send_re = ftp_sendcmd( c_sock, buf, re_buf, &len);
+    re_code = ftp_sendcmd( c_sock, buf, re_buf, &len);
+
+    // response format: 227 Entering Passive Mode (h1,h2,h3,h4,p1,p2).
+    // -> ip address: h1.h2.h3.h4, port: p1*256 + p2
     printf("%s",re_buf);
-    if (send_re != -1) {
+    if (re_code != -1) {
         sscanf(re_buf, "%*[^(](%d,%d,%d,%d,%d,%d)",&addr[0],&addr[1],&addr[2],&addr[3],&addr[4],&addr[5]);
     }
  
@@ -226,20 +186,22 @@ int ftp_pasv_connect( int c_sock )
  
     return r_sock;
 }
- //Indicates the type
+ 
+//Indicates the type A -> ASCII;' I -> Image/Binary
 int ftp_type( int c_sock, char mode )
 {
-    char    cmd[MAX_CMD_LEN], re_buf[MAX_BUFF];
+    char    cmd[MAX_BUFF_SIZE], re_buf[MAX_BUFF_SIZE];
     ssize_t len;
     sprintf( cmd, "TYPE %c\r\n", mode );
     int re_code = ftp_sendcmd( c_sock, cmd, re_buf, &len);
     printf("%s",re_buf);
     return re_code;
 }
+
  //Change working directory
 int ftp_cwd( int c_sock, char *path )
 {
-    char    cmd[MAX_CMD_LEN], re_buf[MAX_BUFF];
+    char    cmd[MAX_BUFF_SIZE], re_buf[MAX_BUFF_SIZE];
     int     re_code;
     ssize_t len;
     sprintf( cmd, "CWD %s\r\n", path );
@@ -247,22 +209,25 @@ int ftp_cwd( int c_sock, char *path )
  
     re_buf[len] = '\0';
     printf("%s", re_buf);
-    return 0;
+    return re_code;
 }
+
+ //Print working directory
 int ftp_pwd(int c_sock, char* re_data)
 {
-    char    cmd[MAX_CMD_LEN];
+    char    cmd[MAX_BUFF_SIZE];
     int     re;
-    sprintf( cmd, "PWD \r\n");
-    char re_buf[MAX_BUFF];
+    char    re_buf[MAX_BUFF_SIZE];
     ssize_t len;
 
+    sprintf( cmd, "PWD \r\n");
     re = ftp_sendcmd( c_sock, cmd , re_buf, &len);
     re_buf[len] = '\0';
 
     if(re != 257) {
         return re;
     }
+    // get path from reply: 257 "__PATH__" is the current directory
     char*wd = strchr(re_buf,'\"');
     char*end_wd = strchr(wd+1, '\"');
     *end_wd ='\0';
@@ -270,14 +235,12 @@ int ftp_pwd(int c_sock, char* re_data)
     return re;
 }
 
- //List
+ //List file and directory 
 int ftp_list( int c_sock, char *path, void **data, ssize_t *data_len)
 {
-    int     d_sock;
-    char    buf[MAX_BUFF], re_buf[MAX_BUFF];
-    int     re_code;
-    int     result;
-    ssize_t     len,buf_len,total_len;
+    int     d_sock, re_code, result;
+    char    buf[MAX_BUFF_SIZE], re_buf[MAX_BUFF_SIZE];
+    ssize_t len,buf_len, total_len;
  
     //Connect to PASV interface
     d_sock = ftp_pasv_connect(c_sock);
@@ -286,23 +249,23 @@ int ftp_list( int c_sock, char *path, void **data, ssize_t *data_len)
     }
     
     //Send LIST command
-    bzero(buf, sizeof(buf));
+    memset(buf, 0, sizeof(buf));
     sprintf( buf, "LIST %s\r\n", path);
     re_code = ftp_sendcmd( c_sock, buf, re_buf, &len );
-    if (re_code >= 300 || re_code == 0){
-
-        return re_code;
-    }
+    re_buf[len] = '\0';
+    printf("%s", re_buf);
  
-    len=total_len = 0;
-    buf_len = MAX_BUFF;
+    len = total_len = 0;
+    buf_len = MAX_BUFF_SIZE;
+
+    void *re_buf_n;
     void *re_data = malloc(buf_len);
     while ( (len = recv( d_sock, buf, 512, 0 )) > 0 )
     {
         if (total_len+len > buf_len)
         {
             buf_len *= 2;
-            void *re_buf_n = malloc(buf_len);
+            re_buf_n = malloc(buf_len);
             memcpy(re_buf_n, re_data, total_len);
             free(re_data);
             re_data = re_buf_n;
@@ -313,29 +276,24 @@ int ftp_list( int c_sock, char *path, void **data, ssize_t *data_len)
     close( d_sock );
  
     //Receive the return value from the server
-    bzero(buf, sizeof(buf));
-    len = recv( c_sock, buf, 512, 0 );
-    buf[len] = 0;
+    memset(buf, 0,sizeof(buf));
+    len = recv( c_sock, buf, MAX_BUFF_SIZE, 0 );
+    buf[len] = '\0';
+    printf("%s",buf);
     sscanf( buf, "%d", &result );
-    if ( result != 226 )
-    {
-        free(re_data);
-        return result;
-    }
 
     *data = re_data;
     *data_len = total_len;
- 
+
     return 0;
 }
- //download file 
+
+//download file 
 int ftp_retrfile( int c_sock, char *s, char *d ,ssize_t *retr_size)
 {
-    int     d_sock;
-    ssize_t     len,write_len;
-    char    buf[MAX_BUFF], re_buf[MAX_BUFF];
-    int     handle;
-    int     result;
+    int     d_sock, handle, result;
+    char    buf[MAX_BUFF_SIZE], re_buf[MAX_BUFF_SIZE];
+    ssize_t len, write_len;
  
     //Open local file
     handle = open( d,  O_WRONLY|O_CREAT|O_TRUNC, S_IREAD|S_IWRITE );
@@ -344,7 +302,7 @@ int ftp_retrfile( int c_sock, char *s, char *d ,ssize_t *retr_size)
         printf("ftp: Can't open file %s\n", d);
         return -1;
     }
-    //Set the transmission mode
+    //Set the transmission mode: Binary
     ftp_type(c_sock, 'I');
  
     //Connect to PASV interface
@@ -365,7 +323,7 @@ int ftp_retrfile( int c_sock, char *s, char *d ,ssize_t *retr_size)
     //Start dowload data to PASV
     memset(buf,0, sizeof(buf));
     clock_t start = clock();
-    while ( (len = recv( d_sock, buf, MAX_BUFF, 0 )) > 0 ) {
+    while ( (len = recv( d_sock, buf, MAX_BUFF_SIZE, 0 )) > 0 ) {
         write_len = write( handle, buf, len );
         if (write_len != len)
         {
@@ -387,7 +345,7 @@ int ftp_retrfile( int c_sock, char *s, char *d ,ssize_t *retr_size)
     
     //Receive the return value from the server
     memset(buf, 0, sizeof(buf));
-    len = recv( c_sock, buf, MAX_BUFF, 0 );
+    len = recv( c_sock, buf, MAX_BUFF_SIZE, 0 );
     buf[len] = '\0';
     printf("%s",buf);
     sscanf( buf, "%d", &result );
@@ -395,11 +353,12 @@ int ftp_retrfile( int c_sock, char *s, char *d ,ssize_t *retr_size)
 
     return result;
 }
- //upload files: put LOCAL_FILE_PATH REMOTE_FILE_PATH
+
+//upload files: put LOCAL_FILE_PATH REMOTE_FILE_PATH
 int ftp_storfile( int c_sock, char *s, char *d ,ssize_t *stor_size)
 {
-    int     d_sock, handle, send_re, result;
-    char    buf[MAX_BUFF], re_buf[MAX_BUFF]; 
+    int     d_sock, handle, re_code, result;
+    char    buf[MAX_BUFF_SIZE], re_buf[MAX_BUFF_SIZE]; 
     ssize_t     len,send_len;
     
     //Open local file
@@ -424,14 +383,14 @@ int ftp_storfile( int c_sock, char *s, char *d ,ssize_t *stor_size)
     //Send STOR command
     memset(buf,0 , sizeof(buf));
     sprintf( buf, "STOR %s\r\n", d );
-    send_re = ftp_sendcmd( c_sock, buf, re_buf, &len );
+    re_code = ftp_sendcmd( c_sock, buf, re_buf, &len );
     re_buf[len] = '\0';
     printf("%s",re_buf);
  
     //Start writing data to the PASV channel
     memset(buf,0 , sizeof(buf));
     clock_t start = clock();
-    while ( (len = read( handle, buf, MAX_BUFF)) > 0)
+    while ( (len = read( handle, buf, MAX_BUFF_SIZE)) > 0)
     {
         send_len = send(d_sock, buf, len, 0);
         if (send_len != len)
@@ -454,7 +413,7 @@ int ftp_storfile( int c_sock, char *s, char *d ,ssize_t *stor_size)
  
     //Receive the return value from the server
     memset(buf,0 , sizeof(buf));
-    len = recv( c_sock, buf, MAX_BUFF, 0 );
+    len = recv( c_sock, buf, MAX_BUFF_SIZE, 0 );
     buf[len] = '\0';
     printf("%s", buf);
     sscanf( buf, "%d", &result );
@@ -467,7 +426,7 @@ int ftp_storfile( int c_sock, char *s, char *d ,ssize_t *stor_size)
 int ftp_quit( int c_sock)
 {
     int re_code = 0;
-    char re_buf[MAX_BUFF];
+    char re_buf[MAX_BUFF_SIZE];
     ssize_t len;
     re_code = ftp_sendcmd( c_sock, "QUIT\r\n", re_buf, &len );
     re_buf[len] = '\0';
